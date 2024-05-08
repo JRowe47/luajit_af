@@ -1,83 +1,100 @@
 local luajit_af = require 'luajit_af'
+local ffi = require 'ffi'
 
-local function test_create_and_release_array()
-    local dims = {2, 2}
-    local data = {1.0, 2.0, 3.0, 4.0}
-    local arr = luajit_af.create_array(data, dims)
-    print("Array Created:")
-    luajit_af.print_array(arr)
-    luajit_af.release_array(arr)
-    print("Array Released Successfully")
+-- Helper function to initialize test data
+local function create_test_array()
+    local ndims = 1
+    local dims = ffi.new("dim_t[1]", {10})  -- Create an array of size 10
+    local dtype = ffi.new("af_dtype", 2)    -- Assuming '2' corresponds to f32
+    local arr = ffi.new("af_array[1]")
+
+    -- Fill the data with example values
+    local data = ffi.new("float[10]")
+    for i = 0, 9 do
+        data[i] = i
+    end
+
+    return arr, data, ndims, dims, dtype
 end
 
-local function test_randu()
-    local dims = {5}
-    local arr = luajit_af.randu(dims)
-    print("Random Array:")
-    luajit_af.print_array(arr)
-    luajit_af.release_array(arr)
+-- Test for af_create_array
+local function test_af_create_array()
+    local arr, data, ndims, dims, dtype = create_test_array()
+    assert(luajit_af.af_create_array(arr, ffi.cast("const void *", data), ndims, dims, dtype) == 0)
+    luajit_af.af_release_array(arr[0])
 end
 
-local function test_exp()
-    local dims = {1}
-    local data = {1.0}
-    local arr = luajit_af.create_array(data, dims)
-    local result = luajit_af.exp(arr)
-    print("Exponential Result:")
-    luajit_af.print_array(result)
-    luajit_af.release_array(arr)
-    luajit_af.release_array(result)
+-- Test for af_create_handle
+local function test_af_create_handle()
+    local arr, _, ndims, dims, dtype = create_test_array()
+    assert(luajit_af.af_create_handle(arr, ndims, dims, dtype) == 0)
+    luajit_af.af_release_array(arr[0])
 end
 
-local function test_arithmetic_operations()
-    local dims = {1}
-    local data1 = {10.0}
-    local data2 = {2.0}
-    local arr1 = luajit_af.create_array(data1, dims)
-    local arr2 = luajit_af.create_array(data2, dims)
-
-    local add_result = luajit_af.add(arr1, arr2)
-    print("Addition Result:")
-    luajit_af.print_array(add_result)
-
-    local sub_result = luajit_af.sub(arr1, arr2)
-    print("Subtraction Result:")
-    luajit_af.print_array(sub_result)
-
-    local mul_result = luajit_af.mul(arr1, arr2)
-    print("Multiplication Result:")
-    luajit_af.print_array(mul_result)
-
-    local div_result = luajit_af.div(arr1, arr2)
-    print("Division Result:")
-    luajit_af.print_array(div_result)
-
-    luajit_af.release_array(arr1)
-    luajit_af.release_array(arr2)
-    luajit_af.release_array(add_result)
-    luajit_af.release_array(sub_result)
-    luajit_af.release_array(mul_result)
-    luajit_af.release_array(div_result)
+-- Test for af_copy_array
+local function test_af_copy_array()
+    local arr, data, ndims, dims, dtype = create_test_array()
+    luajit_af.af_create_array(arr, ffi.cast("const void *", data), ndims, dims, dtype)
+    local arr_copy = ffi.new("af_array[1]")
+    assert(luajit_af.af_copy_array(arr_copy, arr[0]) == 0)
+    luajit_af.af_release_array(arr[0])
+    luajit_af.af_release_array(arr_copy[0])
 end
 
-local function test_set_seed()
-    luajit_af.set_seed(12345)
-    test_randu() -- Should generate a predictable pattern if seed works
+-- Assuming data and other variables are initialized correctly
+local function test_af_write_array()
+    local ndims = 1
+    local dims = ffi.new("dim_t[1]", {10})  -- Creating an array of size 10
+    local dtype = ffi.new("af_dtype", 0)    -- Assuming f32 corresponds to 0 in your setup
+    local arr = ffi.new("af_array[1]")
+
+    -- Allocate and initialize data matching the array type and size
+    local data = ffi.new("float[10]")
+    for i = 0, 9 do
+        data[i] = i * 2.0  -- Arbitrary data initialization
+    end
+
+    luajit_af.af_create_array(arr, ffi.cast("const void *", data), ndims, dims, dtype)
+
+    -- Assuming modification and then write back
+    for i = 0, 9 do
+        data[i] = data[i] + 1.0
+    end
+    local bytes = 10 * ffi.sizeof("float")  -- Size must match exactly
+    local src = 1
+
+    local err = luajit_af.af_write_array(arr[0], ffi.cast("const void *", data), bytes, src)
+    assert(err == 0, "Failed to write array data")
+
+    luajit_af.af_release_array(arr[0])
 end
 
-print("Testing create and release array...")
-test_create_and_release_array()
 
-print("\nTesting random number generation...")
-test_randu()
+-- Test for af_get_data_ptr
+local function test_af_get_data_ptr()
+    local arr, data, ndims, dims, dtype = create_test_array()
+    luajit_af.af_create_array(arr, ffi.cast("const void *", data), ndims, dims, dtype)
+    local retrieved_data = ffi.new("float[10]")
+    assert(luajit_af.af_get_data_ptr(ffi.cast("void *", retrieved_data), arr[0]) == 0)
+    luajit_af.af_release_array(arr[0])
+end
 
-print("\nTesting exponential function...")
-test_exp()
+-- Test for af_release_array
+local function test_af_release_array()
+    local arr, data, ndims, dims, dtype = create_test_array()
+    luajit_af.af_create_array(arr, ffi.cast("const void *", data), ndims, dims, dtype)
+    assert(luajit_af.af_release_array(arr[0]) == 0)
+end
 
-print("\nTesting arithmetic operations...")
-test_arithmetic_operations()
+-- Main function to run all tests
+local function run_tests()
+    test_af_write_array()
+    test_af_create_array()
+    test_af_create_handle()
+    test_af_copy_array()
+    test_af_get_data_ptr()
+    test_af_release_array()
+    print("All tests passed successfully.")
+end
 
-print("\nTesting set seed functionality...")
-test_set_seed()
-
-print("Complete")
+run_tests()
